@@ -1,6 +1,3 @@
-## YouTube preview
-https://www.youtube.com/watch?v=1HTjNi27dK8
-
 ## Run with Docker
 
 To get more information about how to run with docker, read the overview section in the official docker image page.
