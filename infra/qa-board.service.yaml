@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qa-board-ns
+---
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: dev-quota
+  namespace: qa-board-ns # namespace is used to define for which namespace we are defining this quota
+spec:
+  hard:
+    pods: "10"
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "10"
+    limits.memory: 10Gi
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  namespace: qa-board-ns
+  name: qa-board-secret
+type: Opaque
+data:
+  qa-board-bd-username: cG9zdGdyZXM=
+  qa-board-db-password: c2VjcmV0
+  JAVA_OPTS: LUREQl9QQVNTV09SRD1zZWNyZXQgLUREQl9VUkw9amRiYzpwb3N0Z3Jlc3FsOi8vcWEtYm9hcmQtZGItc2VydmljZS9xYV9ib2FyZF9kYiAtRERCX1VTRVI9cG9zdGdyZXMgLURGSUxFX0xPQ0FUSU9OPX4vRG9jdW1lbnRzL2RvY2tlcl9kYXRhL3FhYm9hcmRfZGF0YQ==
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: qa-board-ns
+  name: qa-board-db-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: qa-board-ns
+  name: qa-board-db-deployment
+  labels:
+    app-name: qa-board-db
+spec:
+  template:
+    metadata:
+      namespace: qa-board-ns
+      labels:
+        app-name: qa-board-db
+        type: pod
+    spec:
+      containers:
+        - name: qa-board-db
+          image: postgres
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "1"
+          env:
+            - name: POSTGRES_DB
+              value: "qa_board_db"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: qa-board-secret
+                  key: qa-board-bd-username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: qa-board-db-password
+                  name: qa-board-secret
+          ports:
+            - containerPort: 5433
+          volumeMounts:
+            - name: qa-board-db-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: qa-board-db-data
+          persistentVolumeClaim:
+            claimName: qa-board-db-pvc  # Create a PVC for persistent storage
+  selector:
+    matchLabels:
+      app-name: qa-board-db
+      type: pod
+  replicas: 2
+  serviceName: qa-board-db-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: qa-board-ns
+  name: qa-board-deployment
+  labels:
+    deployment-name: qa-board-deployment
+spec:
+  template:
+    metadata:
+      namespace: qa-board-ns
+      labels:
+        app-name: qa-board-pod
+        type: pod
+    spec:
+      containers:
+        - name: qa-board
+          image: mainul35/university-qa-board:latest
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "1"
+          env:
+            - name: JAVA_OPTS
+              valueFrom:
+                secretKeyRef:
+                  name: qa-board-secret
+                  key: JAVA_OPTS
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: qa-board-data
+              mountPath: ~/Documents/docker_data/qaboard_data
+      volumes:
+        - name: qa-board-db-data
+          persistentVolumeClaim:
+            claimName: qa-board-db-pvc
+        - name: qa-board-data
+          persistentVolumeClaim:
+            claimName: qa-board-db-pvc
+  selector:
+    matchLabels:
+      app-name: qa-board-pod
+      type: pod
+  replicas: 2
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: qa-board-db-service
+  namespace: qa-board-ns
+spec:
+  selector:
+    app-name: qa-board-db
+    type: pod
+  ports:
+    - port: 5433
+      targetPort: 5432
+  clusterIP: None
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: qa-board-service
+  namespace: qa-board-ns
+spec:
+  type: NodePort
+  selector:
+    app-name: qa-board-pod
+    type: pod
+  ports:
+    - port: 8083
+      targetPort: 8080
+      nodePort: 30083

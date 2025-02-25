@@ -1,0 +1,43 @@
+version: '3.8'
+services:
+  qa_board_service:
+    container_name: 'qa_board'
+    image: 'mainul35/university-qa-board:latest'
+    build: ./
+    volumes:
+      - type: volume
+        source: qaboard_volume
+        target: "$PWD/Documents/docker_data/qaboard_data"
+    ports:
+      - '8083:8080'
+    depends_on:
+      - qaboard_db
+    command: catalina.sh run
+    # Pass environment variables to the service
+    environment:
+      JAVA_OPTS: "-DDB_PASSWORD=secret -DDB_URL=jdbc:postgresql://qaboard_db:5432/qa_board_db -DDB_USER=postgres -DFILE_LOCATION=/Documents/docker_data/qaboard_data"
+    networks:
+    - qaboard_netwok
+  qaboard_db:
+    image: 'postgres'
+    container_name: 'qaboard_db'
+    volumes:
+    - type: volume
+      source: qabord_db_volume
+      target: "$PWD/Documents/docker_data/qaboard_db_data"
+    ports:
+    - '5433:5432'
+    environment:
+    - 'POSTGRES_PASSWORD=secret'
+    - 'POSTGRES_USER=postgres'
+    - 'POSTGRES_DB=qa_board_db'
+    networks:
+    - qaboard_netwok
+#    extra_hosts:
+#    - 'qaboard_network:192.168.1.101'
+
+volumes:
+  qabord_db_volume:
+  qaboard_volume:
+networks:
+  qaboard_netwok:
